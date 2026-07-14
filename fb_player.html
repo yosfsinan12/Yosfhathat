@@ -1,0 +1,27 @@
+<html>
+<body>
+<script  type="text/javascript">
+    window.fbAsyncInit = function() {
+      FB.init({
+        appId      : '',
+        xfbml      : true,
+        version    : 'v3.2'
+      });
+      var my_video_player;
+      FB.Event.subscribe('xfbml.ready', function(msg) {
+        if (msg.type == 'video') {
+          my_video_player = msg.instance;
+          my_video_player.play();
+        }
+      });
+    };
+  </script>
+<div id="fb-root"></div>
+<script async defer src="https://connect.facebook.net/en_US/sdk.js"></script>
+<div
+        class="fb-video"
+        data-href="$fb_video_url"
+        data-autoplay="true"
+        data-allowfullscreen="false"></div>
+</body>
+</html>

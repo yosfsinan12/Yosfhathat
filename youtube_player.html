@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+<style>
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: #000000;
+        overflow: hidden;
+        position: fixed;
+        height: 100%;
+        width: 100%;
+        pointer-events: none;
+    }
+
+    #firstPlayer {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+    }
+
+    #secondPlayer {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+    }
+</style>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!--不要手动来插入这个节点，会有很高概率导致js没加载，然后无法播放-->
+    <!--    <script src="https://www.youtube.com/iframe_api"></script>-->
+</head>
+<body>
+<div id="firstPlayer"></div>
+<div id="secondPlayer"></div>
+</body>
+<script type="text/javascript">
+    // 2. This code loads the IFrame Player API code asynchronously.
+    var tag = document.createElement('script');
+
+    tag.src = "https://www.youtube.com/iframe_api";
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    const playerState = {'-1': 'UNSTARTED', 0: 'ENDED', 1: 'PLAYING', 2: 'PAUSED', 3: 'BUFFERING', 5: 'CUED'};
+    //当前正在播放的player
+    let curPlayer;
+    //当前正在预播放的player
+    let prePlayer;
+    let isPlayingOnFirstPlayerLayer = true;
+    let timerId;
+    let start = new Date().getTime();
+    //当前正在播放的player
+    let curVideoId = '';
+    //正在预播放的vid
+    let prePlayedVideoId = "";
+    if ($isPrePlay) {
+        prePlayedVideoId = '$sns_vid'
+    } else {
+        curVideoId = '$sns_vid';
+    }
+    //当前播放器是否ready
+    let isCurPlayerReady = false;
+    //当前预播放器是否ready
+    let isPrePlayerReady = false;
+    const vidPlayerMap = new Map();
+    const playIdPlayerMap = new Map();
+    //保存预播放错误信息,待正式播放时,透传给业务层
+    const prePlayErrorMap = new Map();
+    //保存命中预播放的视频id
+    const hitPrePlayedIdList = [];
+    //是否显示视频时间进度
+    let isCurPlayerShowVideoTime = false;
+    //将要预播放的视频id
+    let pendingPrePlayedVideoId = "";
+    ///预播放是否错峰,即当前播放器起播完毕后,预播放器才开始启动,避免影响当前播放器的速度
+    let isPrePlayOffPeak = $isOffPeak;
+    ///当开始播放时，是否停止其他正在预播放的视频,避免影响当前播放器的速度
+    let stopPPWhenStartPlay = $stopPPWhenStartPlay;
+    function isPlayerReady(isPrePlay) {
+        console.log("js isCurPlayerReady:" + isCurPlayerReady + " isPrePlayerReady:" + isPrePlayerReady);
+        return isPrePlay ? isPrePlayerReady : isCurPlayerReady;
+    }
+
+    function convertToString(state) {
+        const stateStr = playerState[state];
+        if (stateStr === undefined) {
+            return playerState[state.toString()];
+        } else {
+            return stateStr;
+        }
+    }
+
+    window.onload = function () {
+        const takes = new Date().getTime() - start;
+        console.log("window onload is called, takes " + takes + " ms");
+    };
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const takes = new Date().getTime() - start;
+        console.log("DOMContentLoaded, takes: " + takes + " ms");
+    });
+
+    window.onDomReady = function () {
+        console.log("window onDomReady");
+    };
+
+    function onYouTubeIframeAPIReady() {
+        isCurPlayerReady = false;
+        isPrePlayerReady = false;
+        window.flutter_inappwebview.callHandler('loadVideoEvent', 'ApiReady', false);
+        var takes = new Date().getTime() - start;
+        console.log("IFrameApiReady is called, takes:" + takes + " ms");
+        curPlayer = createPlayer('firstPlayer', curVideoId, false);
+        playIdPlayerMap.set('firstPlayer', curPlayer)
+        if ($enablePrePlay) {
+            prePlayer = createPlayer('secondPlayer', prePlayedVideoId, true)
+            playIdPlayerMap.set('secondPlayer', prePlayer)
+        }
+    }
+
+    function createPlayer(playId, vid, isPrePlay) {
+        return new YT.Player(playId, {
+            height: '100%',
+            width: '100%',
+            videoId: vid,
+            playerVars: {
+                'controls': 0,
+                'playsinline': 1,
+                'enablejsapi': 1,
+                'fs': 0,
+                'rel': 0,
+                'showinfo': 0,
+                'iv_load_policy': 3,
+                'modestbranding': 0,
+                'cc_load_policy': 1,
+                'cc_lang_pref': '$captionLanguage',
+                'start': '$startAt',
+            },
+            events: {
+                onReady: function (event) {
+                    if (isPrePlay) {
+                        isPrePlayerReady = true;
+                    } else {
+                        isCurPlayerReady = true;
+                    }
+                    if (vid !== "") {
+                        if ($isMute || isPrePlay) {
+                            muteWithPlayer(playIdPlayerMap.get(playId));
+                        } else {
+                            unMuteWithPlayer(playIdPlayerMap.get(playId));
+                        }
+                        if (isPrePlay) {
+                            playIdPlayerMap.get(playId).loadVideoById(vid, 0, "");
+                            playIdPlayerMap.get(playId).mute();
+                            prePlayedVideoId = vid;
+                        } else if ($autoPlay) {
+                            playWithPlayer(playIdPlayerMap.get(playId));
+                        }
+                    }
+                    const isCurPrePlay = playIdPlayerMap.get(playId) === prePlayer;
+                    const takes = new Date().getTime() - start;
+                    console.log("PlayerReady takes:" + takes + " ms" + " isPrePlayParam:" + isPrePlay + " vid:" + vid + " prePlayedVideoId:"
+                        + prePlayedVideoId + " curVideoId:" + curVideoId + " playId:" + playId + " isCurPrePlay:" + isCurPrePlay);
+                    window.flutter_inappwebview.callHandler('loadVideoEvent', 'PlayerReady', isCurPrePlay);
+                },
+
+                onStateChange: function (event) {
+                    var takes = 0;
+                    let player = playIdPlayerMap.get(playId);
+                    const isCurPrePlay = player === prePlayer;
+                    const stateStr = convertToString(event.data);
+                    //是否命中预播放的视频
+                    let isHitPrePlayVideo = false;
+                    if (player === curPlayer) {
+                        const curPlayVid = getVidFromPlayer(player);
+                        isHitPrePlayVideo = hitPrePlayedIdList.includes(curPlayVid);
+                    }
+                    const extraLog =  " state:" + stateStr + " isPrePlayParam:" + isPrePlay + " isCurPrePlay:" + isCurPrePlay + " playId:"
+                        + playId+" prePlayedVideoId:"+prePlayedVideoId+" curVideoId:"+curVideoId+" isHitPrePlayVideo:"+isHitPrePlayVideo;
+                    if (event.data === YT.PlayerState.PLAYING) {
+                        takes = new Date().getTime() - start;
+                        console.log("onStateChange takes:" + takes + " ms " + extraLog);
+                    } else {
+                        console.log("onStateChange " + extraLog);
+                    }
+                    sendPlayerStateChange(player, event.data, isCurPrePlay, isHitPrePlayVideo);
+                },
+                onPlaybackQualityChange: function (event) {
+                    window.flutter_inappwebview.callHandler('PlaybackQualityChange', event.data, playerState, playIdPlayerMap.get(playId) == prePlayer);
+                },
+                onPlaybackRateChange: function (event) {
+                    window.flutter_inappwebview.callHandler('PlaybackRateChange', event.data, playerState, playIdPlayerMap.get(playId) == prePlayer);
+                },
+                onError: function (error) {
+                    const isCurPrePlay = playIdPlayerMap.get(playId) === prePlayer;
+                    window.flutter_inappwebview.callHandler('Errors', error.data, playIdPlayerMap.get(playId) == prePlayer);
+                    if (isCurPrePlay) {
+                        let tempIsPrePlayerVId = getVidFromPlayer(prePlayer);
+                        console.log("onError error.data:" + error.data + " tempIsPrePlayerVId:" + tempIsPrePlayerVId);
+                        if (tempIsPrePlayerVId !== "") {
+                            prePlayErrorMap.set(tempIsPrePlayerVId, error.data)
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function getVidFromPlayer(player) {
+        let vid = "";
+        try {
+            vid = player.getVideoData().video_id;
+            console.log("getVidFromPlayer  vid:" + vid);
+        } catch (e) {
+            console.log("getVidFromPlayer error:" + e);
+        }
+        return vid;
+    }
+
+    function prePlay(vid) {
+        if (prePlayer === undefined) {
+            return
+        }
+        console.log("prePlay vid:" + vid + " prePlayedVideoId:" + prePlayedVideoId + " isPrePlayerReady:" + isPrePlayerReady + " pendingPrePlayedVideoId:" + pendingPrePlayedVideoId);
+        if (!isPrePlayerReady) {
+            return
+        }
+        pendingPrePlayedVideoId = "";
+        //正在预播放相同的vid,无需再次预播
+         if (vid === prePlayedVideoId) {
+            const buffer = prePlayer.getVideoLoadedFraction();
+            const curTime = prePlayer.getCurrentTime();
+            const prePlayerVid = getVidFromPlayer(prePlayer);
+            const state = prePlayer.getPlayerState();
+            console.log("prePlay the same vid  buffer:" + buffer+ " curTime:" + curTime+ " state:" + state+" prePlayerVid:"+prePlayerVid);
+            //有这种情况会导致预播放无效,当前正在播放ytb A, 此时ytb B预播放,并等待成功,状态是Pause,,然后滑动列表，让A的卡片销毁(播放器也销毁)而且不要触发B的自动播放
+            //然后再次滑动到B，触发自动播放此时发现B虽然命中了预播放的逻辑,但是还是启动很慢，没有达到效果
+            //以下几种尝试
+            //1.怀疑是stopVideo导致的，注释掉之后依然由此问题
+            //2.假设A和B相隔较近，滑动列表从A直接到B，中途不要停止，触发B的自动播放，保证A播放器的销毁和B的播放衔接在一起,此时可以达到预播放的效果
+            //3.假设A和B相隔较远，滑动列表从A直接到B，A播放器在滑动过程中随卡片的销毁而销毁,触发B的自动播放,此时跟1的效果一致，命中了预播放的逻辑，但是预播放无效
+            //怀疑点:可能是卡片销毁之后，webView处于游离状态,将预播放的视频清除掉了，不过很奇怪buffer和state都是正常的
+            //临时解决方案:因为之前的逻辑滑动停止之后会尝试预播放，判断了如果正在预播放相同的vid,则直接返回,这里加个判断,如果状态时pause
+            //则直接playVideo,可以理解为继续预播放，当状态是BUFFERING,无需处理,其余状态则直接重新预播放
+            //这里使用playVideo,一方面可以将之前清除的预播放视频重新找回来，另一方面因为其他场景没有此问题，为了避免误伤，减少重新预播放的代价，
+            //所以这里使用playVideo，代价小
+            if (YT.PlayerState.PAUSED === state) {
+                console.log("prePlay the same vid playVideo");
+                prePlayer.playVideo();
+                return;
+            }
+             if (YT.PlayerState.BUFFERING === state) {
+                return;
+            }
+        }
+        //如果当前正在播放的视频不是预播放过的视频，那预播放的视频相当于没有命中，停止播放
+        if (prePlayedVideoId !== "" && curVideoId !== prePlayedVideoId) {
+            console.log("prePlay, stop prePlay prePlayedVideoId:" + prePlayedVideoId + " curVideoId:" + curVideoId);
+            stopPrePlay(false)
+        }
+        prePlayer.loadVideoById(vid, 0, "");
+        prePlayer.mute();
+        prePlayedVideoId = vid;
+    }
+
+    function stopPrePlay(isStopVideo) {
+        if (prePlayer === undefined) {
+            console.log("stopPrePlay prePlayer is null return");
+            return
+        } else {
+            console.log("stopPrePlay prePlayer isStopVideo:"+isStopVideo);
+            if (isStopVideo) {
+                prePlayer.stopVideo();
+            }
+        }
+        prePlayedVideoId = "";
+    }
+
+    function sendPlayerStateChange(player, playerState, isPrePlay, isHitPrePlayVideo) {
+        if (player === undefined) {
+            console.log("sendPlayerStateChange player is null");
+        }
+        if (YT.PlayerState.PLAYING === playerState) {
+            console.log("sendPlayerStateChange playing isPrePlay:" + isPrePlay + " pendingPrePlayedVideoId:" + pendingPrePlayedVideoId+" isPrePlayOffPeak:"+isPrePlayOffPeak);
+        }
+        //如果是预播放器收到开始播放(第一帧)的回调时,就暂停播放，后续播放时直接起播
+        if (isPrePlay && YT.PlayerState.PLAYING === playerState) {
+            console.log("prePlay change to playing and pause it");
+            player.pauseVideo();
+            return;
+        }
+        //这里为了保证当前播放器快起起播,错开预播放器的启动,当前播放器首帧显示出来,再去预播放
+        if (isPrePlayOffPeak && !isPrePlay && YT.PlayerState.PLAYING === playerState && pendingPrePlayedVideoId !== "") {
+            prePlay(pendingPrePlayedVideoId);
+        }
+        clearTimeout(timerId);
+        window.flutter_inappwebview.callHandler('StateChange', playerState, isPrePlay, isHitPrePlayVideo);
+        if (playerState === 1) {
+            startSendCurrentTimeInterval(isPrePlay);
+            sendVideoData(player, isPrePlay);
+        }
+    }
+
+    function sendVideoData(player, isPrePlay) {
+        var videoData = {
+            'duration': player.getDuration(),
+            'title': player.getVideoData().title,
+            'author': player.getVideoData().author,
+            'videoId': player.getVideoData().video_id
+        };
+        window.flutter_inappwebview.callHandler('VideoData', videoData, isPrePlay);
+    }
+
+    function startSendCurrentTimeInterval(isPrePlay) {
+        //预播放和直播不需要显示时间进度
+        if (!$isLive && !isPrePlay && isCurPlayerShowVideoTime) {
+            timerId = setInterval(function () {
+                    window.flutter_inappwebview.callHandler('VideoTime', curPlayer.getCurrentTime(), curPlayer.getDuration
+                    (), curPlayer.getVideoLoadedFraction(), isPrePlay);
+                },
+                500);
+        }
+    }
+
+    function playWithPlayer(player) {
+        if (player === undefined) {
+            console.log("playWithPlayer is null");
+            return false;
+        }
+        player.playVideo();
+        return true;
+    }
+
+    function play() {
+        console.log("play()");
+        curPlayer.playVideo();
+        return true;
+    }
+
+
+    function pause() {
+        console.log("pause()");
+        curPlayer.pauseVideo();
+        return true;
+    }
+
+    function stopVideo(videoInfo) {
+        try {
+            console.log("stopVideo curPlayer videoId:"+ videoInfo.videoId +
+                ", curVideoId:" + curVideoId + ", equal:" + (videoInfo.videoId === curVideoId));
+            if (curPlayer === undefined) {
+                console.log("stopVideo player is null");
+                return false;
+            }
+            if ((curVideoId != null || curVideoId !== '') && videoInfo && videoInfo.videoId === curVideoId) {
+                console.log("stopVideo " + curVideoId);
+                curPlayer.stopVideo();
+                //清除视频显示
+                curPlayer.clearVideo();
+                curVideoId = '';
+                return true;
+            }
+        } catch (e) {
+            console.log("stop Video error:" + e);
+        }
+        return false;
+    }
+
+    function loadById(loadSettings,isPrePlay,willPrePlayVid) {
+        try {
+            console.log("loadById, curVideoId:" + loadSettings.videoId + " prePlayedVideoId:" + prePlayedVideoId
+            +" willPrePlayVid:"+willPrePlayVid
+            +" isPrePlay:"+isPrePlay
+            +" isPrePlayOffPeak:"+isPrePlayOffPeak
+            +" stopPPWhenStartPlay:"+stopPPWhenStartPlay);
+            if (curPlayer === undefined) {
+                console.log("loadById player is not ready");
+                return false;
+            }
+            //预播放调用的loadById
+            if (isPrePlay) {
+                prePlay(loadSettings.videoId);
+                return true
+            }
+            //重新播放时，要清空命中预播放的视频id列表
+            if (hitPrePlayedIdList.length > 0) {
+                hitPrePlayedIdList.splice(0, hitPrePlayedIdList.length);
+            }
+            if (curVideoId !== "" && curVideoId !== loadSettings.videoId) {
+                console.log("loadVideoById, stop curPlayer pre vid:" + curVideoId);
+                curPlayer.stopVideo();
+                //清除视频显示
+                curPlayer.clearVideo();
+            }
+            curVideoId = loadSettings.videoId;
+
+            if (hitPrePlayVideo(curVideoId)) {
+                playPrePlayedVideo(curVideoId);
+                prePlayedVideoId = "";
+                //播放之后继续准备预播放其他vid,如果是错峰的话,先保留预播放的视频id,后续当前播放器首帧出现时,再预播放
+                if (isPrePlayOffPeak) {
+                    pendingPrePlayedVideoId = willPrePlayVid;
+                } else {
+                    if (willPrePlayVid !== "" && willPrePlayVid !== undefined) {
+                        prePlay(willPrePlayVid);
+                    }
+                }
+                return true
+            }
+            if (stopPPWhenStartPlay){
+                stopPrePlay(true);
+            }
+            start = new Date().getTime();
+            console.log("js loadById:" + JSON.stringify(loadSettings));
+            curPlayer.loadVideoById(loadSettings);
+            //播放之后继续准备预播放其他vid,如果是错峰的话,先保留预播放的视频id,后续当前播放器首帧出现时,再预播放
+            if (isPrePlayOffPeak) {
+                pendingPrePlayedVideoId = willPrePlayVid;
+            } else {
+                if (willPrePlayVid !== "" && willPrePlayVid !== undefined) {
+                    prePlay(willPrePlayVid);
+                }
+            }
+            prePlayErrorMap.clear();
+            return true;
+        } catch (e) {
+            console.log("loadById error:" + e);
+        }
+        return false;
+    }
+
+    //是否命中了预播放的视频
+    function hitPrePlayVideo(curVid) {
+        if (prePlayedVideoId === curVid) {
+            return true
+        }
+    }
+
+    //播放预播放过的视频,实际预播放的视频是暂停状态，直接将播放器前置，然后继续播放即可
+    function playPrePlayedVideo(vid) {
+        document.getElementById("secondPlayer").style.zIndex = isPlayingOnFirstPlayerLayer ? "1" : "-1";
+        isPlayingOnFirstPlayerLayer = !isPlayingOnFirstPlayerLayer;
+        const buffer = prePlayer.getVideoLoadedFraction();
+        const curTime = prePlayer.getCurrentTime();
+        const prePlayerVid = getVidFromPlayer(prePlayer);
+        console.log("playPrePlayedVideo, isPlayingOnFirstPlayerLayer:" + isPlayingOnFirstPlayerLayer
+            + " curPlayer.state:" + curPlayer.getPlayerState()
+            + " prePlayer.state:" + prePlayer.getPlayerState()
+            + " buffer:" + buffer
+            + " curTime:" + curTime
+            + " prePlayerVid:" + prePlayerVid);
+        hitPrePlayedIdList.push(curVideoId);
+        const tempPlay = curPlayer;
+        curPlayer = prePlayer;
+        prePlayer = tempPlay;
+        //虽然预播放成功,但是某些情况下,播放器可能被销毁了或者其他非PAUSED状态,
+        //这里兼容下,PAUSED或者BUFFERING时,继续播放,其他状态直接重播
+        if (YT.PlayerState.PAUSED === curPlayer.getPlayerState() || YT.PlayerState.BUFFERING === curPlayer.getPlayerState()) {
+            console.log("playPrePlayedVideo ready playVideo");
+            curPlayer.playVideo();
+        } else {
+            console.log("playPrePlayedVideo loadVideoById");
+            curPlayer.loadVideoById(vid, 0, "");
+        }
+        curPlayer.unMute();
+        let error = prePlayErrorMap.get(curVideoId);
+        if (error !== undefined) {
+            //将保存的错误信息传给上层
+            window.flutter_inappwebview.callHandler('Errors', error.data, false);
+        }
+        prePlayErrorMap.clear()
+    }
+
+    function cueById(cueSettings) {
+        try {
+            start = new Date().getTime();
+            curPlayer.cueVideoById(cueSettings);
+            return true;
+        } catch (e) {
+            console.log("cueById:" + e);
+        }
+        return false;
+    }
+
+    function loadPlaylist(playlist, index, startAt) {
+        curPlayer.loadPlaylist(playlist, 'playlist', index, startAt);
+        return '';
+    }
+
+    function cuePlaylist(playlist, index, startAt) {
+        start = new Date().getTime();
+        curPlayer.cuePlaylist(playlist, 'playlist', index, startAt);
+        return '';
+    }
+
+    function mute() {
+        curPlayer.mute();
+        return true;
+    }
+
+    function muteWithPlayer(player) {
+        if (player === undefined) {
+            console.log("mute player is null");
+            return false;
+        }
+        player.mute();
+        return true;
+    }
+
+    function unMute() {
+        curPlayer.unMute();
+        return true;
+    }
+
+    function unMuteWithPlayer(player) {
+        if (player === undefined) {
+            console.log("unMute player is null");
+            return false;
+        }
+        player.unMute();
+        return true;
+    }
+
+    function isMuted() {
+        curPlayer.isMuted();
+        return true;
+    }
+
+    function setVolume(volume) {
+        curPlayer.setVolume(volume);
+        return true;
+    }
+
+    function seekTo(position, seekAhead) {
+        curPlayer.seekTo(position, seekAhead);
+        return true;
+    }
+
+    function setSize(width, height) {
+        curPlayer.setSize(width, height);
+        return true;
+    }
+
+    function setPlaybackRate(rate) {
+        curPlayer.setPlaybackRate(rate);
+        return true;
+    }
+
+    function setTopMargin(margin) {
+        document.getElementById("player").style.marginTop = margin;
+        return true;
+    }
+
+    function setShowVideoTime(isShow) {
+        isCurPlayerShowVideoTime = isShow;
+        clearTimeout(timerId);
+        if (!$isLive && isShow) {
+            timerId = setInterval(function () {
+                    window.flutter_inappwebview.callHandler('VideoTime', curPlayer.getCurrentTime(), curPlayer.getDuration
+                    (), curPlayer.getVideoLoadedFraction(), false);
+                },
+                500);
+        }
+        console.log("setShowVideoTime isShow:" + isShow);
+    }
+
+    function supportDoubleSpeed() {
+        let availablePlaybackRates = curPlayer.getAvailablePlaybackRates();
+        console.log("supportDoubleSpeed availablePlaybackRates:" + availablePlaybackRates);
+        for (let i = 0; i < availablePlaybackRates.length; i++) {
+            if (i === 2) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    console.log("LoadHtml is called");
+    window.flutter_inappwebview.callHandler('loadVideoEvent', 'LoadHtml', false);
+</script>
+</html>
