@@ -2,57 +2,41 @@
 <html lang="ku">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PUBG Mobile Lobby UI</title>
+    <title>PUBG Mobile Lobby</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
+        .lobby { width: 100vw; height: 100vh; background: url('image.png') center/cover; position: relative; }
         
-        /* دانانا وێنەیێ PUBG */
-        .lobby-bg {
-            width: 100vw; height: 100vh;
-            background-image: url('image.png'); /* ڤێ وێنەیێ دگەل فایلێ خوە د هەمان فۆڵدەرێ دا دانی */
-            background-size: cover;
-            background-position: center;
-            position: relative;
-        }
-
+        /* ستایلێ پشکێ ئایدیێ */
+        .profile-id { position: absolute; top: 20px; left: 80px; font-size: 20px; color: #ffd700; font-weight: bold; }
+        
         /* ستایلێ دوگمەیان */
-        .btn {
-            position: absolute;
-            cursor: pointer;
-            color: white;
-            background: rgba(0, 0, 0, 0.6);
-            border: 1px solid #ffcc00;
-            padding: 15px 30px;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 8px;
-            text-transform: uppercase;
-        }
-
-        .btn:hover { background: rgba(255, 204, 0, 0.8); color: black; }
+        .btn { position: absolute; cursor: pointer; padding: 15px 30px; background: rgba(0,0,0,0.6); border: 2px solid #ffd700; border-radius: 5px; color: white; text-transform: uppercase; }
+        .btn:hover { background: #ffd700; color: #000; }
         
-        /* جهێن دوگمەیان */
-        .btn-start { bottom: 50px; left: 50px; width: 220px; text-align: center; }
-        .btn-inventory { bottom: 50px; right: 50px; }
+        .start { bottom: 50px; left: 50px; width: 200px; text-align: center; }
+        .inventory { bottom: 50px; right: 50px; }
     </style>
 </head>
 <body>
 
-<div class="lobby-bg">
-    <!-- دوگمەیا Start -->
-    <div class="btn btn-start" onclick="action('START')">START</div>
-    
-    <!-- دوگمەیا Inventory -->
-    <div class="btn btn-inventory" onclick="action('INVENTORY')">INVENTORY</div>
+<div class="lobby">
+    <!-- پشکێ نیشاندانا ئایدیێ -->
+    <div class="profile-id" id="userID">ID: 5123456789</div>
+
+    <div class="btn start" onclick="doAction('START')">START</div>
+    <div class="btn inventory" onclick="doAction('INVENTORY')">INVENTORY</div>
 </div>
 
 <script>
-    function action(type) {
-        if(type === 'START') {
-            alert('یاری دهێتە دەستپێکرن...');
-        } else if(type === 'INVENTORY') {
-            alert('Inventory دهێتە ڤەکرن...');
+    // لێرە ئایدیێ خوە ل سەر وێبسایتێ نیشان بدە
+    document.getElementById('userID').innerText = "ID: 5123456789";
+
+    function doAction(action) {
+        if(action === 'START') {
+            alert('یاری هاتە دەستپێکرن!');
+        } else if(action === 'INVENTORY') {
+            alert('ئینڤێنتۆری هاتە ڤەکرن!');
         }
     }
 </script>
