@@ -2,36 +2,60 @@
 <html lang="ku">
 <head>
     <meta charset="UTF-8">
-    <title>PUBG Mobile Lobby Fake</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PUBG Mobile Lobby UI</title>
     <style>
-        body { margin: 0; padding: 0; background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
-        .lobby-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
         
-        /* Header UI */
-        .top-bar { display: flex; justify-content: flex-end; gap: 15px; }
-        .currency { background: #333; padding: 5px 15px; border-radius: 20px; border: 1px solid #ffd700; }
+        /* دانانا وێنەیێ PUBG */
+        .lobby-bg {
+            width: 100vw; height: 100vh;
+            background-image: url('image.png'); /* ڤێ وێنەیێ دگەل فایلێ خوە د هەمان فۆڵدەرێ دا دانی */
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+
+        /* ستایلێ دوگمەیان */
+        .btn {
+            position: absolute;
+            cursor: pointer;
+            color: white;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #ffcc00;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            text-transform: uppercase;
+        }
+
+        .btn:hover { background: rgba(255, 204, 0, 0.8); color: black; }
         
-        /* Character Placeholder */
-        .character-zone { flex-grow: 1; display: flex; justify-content: center; align-items: center; }
-        .character { width: 200px; height: 400px; background: url('https://via.placeholder.com/200x400') center/cover; border: 2px solid #555; }
-        
-        /* Start Button */
-        .start-btn { width: 200px; padding: 20px; background: #ffcc00; color: black; font-weight: bold; text-align: center; border-radius: 5px; cursor: pointer; }
+        /* جهێن دوگمەیان */
+        .btn-start { bottom: 50px; left: 50px; width: 220px; text-align: center; }
+        .btn-inventory { bottom: 50px; right: 50px; }
     </style>
 </head>
 <body>
 
-<div class="lobby-container">
-    <div class="top-bar">
-        <div class="currency">100,000,000 UC</div>
-        <div class="currency">999,999 BP</div>
-    </div>
-
-    <div class="character-zone">
-        <div class="character"></div> </div>
-
-    <div class="start-btn">START</div>
+<div class="lobby-bg">
+    <!-- دوگمەیا Start -->
+    <div class="btn btn-start" onclick="action('START')">START</div>
+    
+    <!-- دوگمەیا Inventory -->
+    <div class="btn btn-inventory" onclick="action('INVENTORY')">INVENTORY</div>
 </div>
+
+<script>
+    function action(type) {
+        if(type === 'START') {
+            alert('یاری دهێتە دەستپێکرن...');
+        } else if(type === 'INVENTORY') {
+            alert('Inventory دهێتە ڤەکرن...');
+        }
+    }
+</script>
 
 </body>
 </html>
